@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Measurement viewer</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>
+    body { margin: 0; font: 14px/1.4 system-ui, sans-serif; }
+    #map { position: absolute; inset: 0; }
+    #panel { position: absolute; top: 10px; left: 10px; background: #fff; padding: 10px 14px;
+             border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.3); max-width: 320px; }
+    .maplibregl-popup-content { max-width: 300px; }
+    td { padding: 0 6px 0 0; vertical-align: top; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">Loading…</div>
+<script>
+  // Map tiles: OpenStreetMap. Data: this API's GeoJSON export for the file in the URL.
+  const fileId = location.pathname.split("/").filter(Boolean).pop();
+  const map = new maplibregl.Map({
+    container: "map",
+    style: {
+      version: 8,
+      sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+                        tileSize: 256, attribution: "© OpenStreetMap contributors" } },
+      layers: [{ id: "osm", type: "raster", source: "osm" }]
+    },
+    center: [78.9, 21], zoom: 4
+  });
+
+  const fmt = (v, unit) => v == null ? null : `${v.toLocaleString()} ${unit}`;
+
+  map.on("load", async () => {
+    const [info, data] = await Promise.all([
+      fetch(`/api/files/${fileId}/`).then(r => r.json()),
+      fetch(`/api/files/${fileId}/measurements/?format=geojson`).then(r => r.json())
+    ]);
+    document.getElementById("panel").innerHTML =
+      `<b>${info.filename}</b><br>${info.feature_count} features · ${info.crs} · ${info.status}`;
+
+    map.addSource("features", { type: "geojson", data });
+    map.addLayer({ id: "fill", type: "fill", source: "features", filter: ["==", "$type", "Polygon"],
+                   paint: { "fill-color": "#e4572e", "fill-opacity": 0.35 } });
+    map.addLayer({ id: "line", type: "line", source: "features",
+                   paint: { "line-color": "#29335c", "line-width": 2 } });
+    map.addLayer({ id: "point", type: "circle", source: "features", filter: ["==", "$type", "Point"],
+                   paint: { "circle-radius": 5, "circle-color": "#f3a712" } });
+
+    // Zoom to the data.
+    const bounds = new maplibregl.LngLatBounds();
+    const extend = c => typeof c[0] === "number" ? bounds.extend(c) : c.forEach(extend);
+    data.features.filter(f => f.geometry).forEach(f => extend(f.geometry.coordinates ?? []));
+    if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 40, maxZoom: 17 });
+
+    map.on("click", e => {
+      const f = map.queryRenderedFeatures(e.point, { layers: ["point", "line", "fill"] })[0];
+      if (!f) return;
+      const p = f.properties;
+      const rows = [
+        ["Area", fmt(p.area_sq_m, "m²")], ["", fmt(p.area_hectares, "ha")], ["", fmt(p.area_acres, "acres")],
+        ["Length", fmt(p.length_m, "m")], ["Along slope", fmt(p.length_3d_m, "m")],
+        ["Max grade", fmt(p.max_grade_pct, "%")], ["Measured in", p.projected_crs || p.method]
+      ].filter(([, v]) => v);
+      const name = p.Name || p.name || `Feature ${f.id}`;
+      new maplibregl.Popup().setLngLat(e.lngLat)
+        .setHTML(`<b>${name}</b> <small>(${p.layer})</small><table>` +
+                 rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("") + "</table>")
+        .addTo(map);
+    });
+  });
+</script>
+</body>
+</html>
