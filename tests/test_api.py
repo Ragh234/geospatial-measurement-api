@@ -99,6 +99,15 @@ def test_source_crs_for_shapefile_without_prj(upload):
     assert ok.status_code == 201 and ok.json()["crs"] == "EPSG:32643"
 
 
+def test_projected_file_explains_grid_versus_ground_area(client, upload):
+    # A 100 m x 100 m square on the ground is ~10,011.5 m² on the UTM 43N grid around Bengaluru.
+    gdf = gpd.GeoDataFrame(geometry=[f.square(*f.BENGALURU, 100)], crs=4326).to_crs(32643)
+    file_id = upload("plan.zip", f.shapefile_zip(gdf)).json()["id"]
+    feature = client.get(f"/api/files/{file_id}/measurements/").json()["features"][0]
+    assert feature["measurement"]["area_sq_m"] == pytest.approx(10_000, abs=0.05)
+    assert "own grid (EPSG:32643)" in feature["notes"][0]
+
+
 def test_invalid_source_crs(upload, mine_kml):
     assert upload("survey.kml", mine_kml, source_crs="EPSG:not-a-code").status_code == 400
 

@@ -58,6 +58,8 @@ def build_features(layer: readers.Layer, start_index: int = 0) -> list[Feature]:
     parts = [cleaning.split_parts(g) for g, _ in cleaned]
     measurements = measure.measure_all(parts)
     properties = gdf.drop(columns=gdf.geometry.name).to_dict("records")
+    # Map ("grid") area in the file's own projected CRS, e.g. what AutoCAD shows for a UTM drawing.
+    grid_areas = gdf.geometry.area.tolist() if gdf.crs is not None and gdf.crs.is_projected else None
 
     features = []
     for i, original in enumerate(originals):
@@ -80,6 +82,8 @@ def build_features(layer: readers.Layer, start_index: int = 0) -> list[Feature]:
                 feature.notes.append(f"{flat.geom_type} is not a measurable geometry type.")
         else:
             _copy_measurement(feature, m)
+            if grid_areas and poly is not None:
+                _add_grid_note(feature, grid_areas[i], source_crs)
             if line is not None and layer.z_is_elevation[i] and original.has_z:
                 _add_slope(feature, original)
         features.append(feature)
@@ -92,6 +96,15 @@ def _copy_measurement(feature: Feature, m: measure.Measurement) -> None:
     feature.projected_crs = m.projected_crs
     feature.method = m.method
     feature.geodesic_diff_pct = m.geodesic_diff_pct
+
+
+def _add_grid_note(feature: Feature, grid_area: float, source_crs: str) -> None:
+    """Explain why a CAD/GIS user sees a different number in their own software."""
+    if feature.area_sq_m and abs(grid_area - feature.area_sq_m) / feature.area_sq_m * 100 > 0.01:
+        feature.notes = feature.notes + [
+            f"In the file's own grid ({source_crs}) this is {grid_area:,.2f} m². That is map area; the projection "
+            f"stretches it, so the true ground area reported here is {feature.area_sq_m:,.2f} m²."
+        ]
 
 
 def _add_slope(feature: Feature, original) -> None:

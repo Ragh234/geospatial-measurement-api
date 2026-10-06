@@ -1,7 +1,7 @@
 """Response shapes. The database stores m² and m; hectares, acres and km are derived here."""
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.db import Feature
 
@@ -29,6 +29,12 @@ class FileInfo(BaseModel):
     error: str | None
     created_at: datetime
     processed_at: datetime | None
+
+    @field_validator("created_at", "processed_at")
+    @classmethod
+    def _as_utc(cls, value: datetime | None) -> datetime | None:
+        # SQLite drops the timezone when it stores a datetime; every timestamp here is UTC.
+        return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
 
 
 class Measurement(BaseModel):
