@@ -1,5 +1,7 @@
 # Geospatial File Measurement API
 
+[![tests](https://github.com/Ragh234/geospatial-measurement-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Ragh234/geospatial-measurement-api/actions/workflows/ci.yml)
+
 Upload a zipped Shapefile, a KML or a KMZ and get the area of every polygon and the length of every line, in metres. The numbers are true ground values: a 1 km square near Bengaluru comes back as 1,000,000.00 m², where plain UTM says 1,001,154 m².
 
 Built with FastAPI, GeoPandas (pyogrio/GDAL), Shapely 2 and pyproj, for the Aereo SDE intern assignment.
