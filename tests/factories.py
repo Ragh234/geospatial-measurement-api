@@ -61,7 +61,8 @@ def zip_bytes(files: dict[str, bytes]) -> bytes:
 # ---------------------------------------------------------------- KML
 
 def coords(points) -> str:
-    return " ".join(",".join(f"{v:.7f}".rstrip("0").rstrip(".") for v in p) for p in points)
+    # 10 decimals so test areas aren't skewed by rounding (7 decimals is ~1 cm, enough to move 0.13 m²)
+    return " ".join(",".join(f"{v:.10f}".rstrip("0").rstrip(".") for v in p) for p in points)
 
 
 def kml_polygon(outer, holes=()) -> str:
